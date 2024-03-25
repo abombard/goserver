@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/abombard/goserver/model/game"
 	"github.com/abombard/goserver/pkg/kweb"
@@ -19,6 +19,8 @@ func (wctx Ping) Do(ctx context.Context) (any, *kweb.Error) {
 	return "pong", nil
 }
 
+var games = map[string]game.Game{}
+
 type GamePost struct {
 	kweb.Fetcher
 	kweb.ReaderJSON
@@ -27,9 +29,9 @@ type GamePost struct {
 }
 
 func (e GamePost) Do(ctx context.Context) (any, *kweb.Error) {
-	fmt.Printf("received POST %+v\n", e.Game)
+	games[e.Id] = e.Game
 
-	return nil, nil
+	return kweb.Response{Status: http.StatusCreated}, nil
 }
 
 type GameGet struct {
@@ -40,8 +42,13 @@ type GameGet struct {
 }
 
 func (e GameGet) Do(ctx context.Context) (any, *kweb.Error) {
-	return game.Game{
-		Id: e.Id,
+	if g, ok := games[e.Id]; ok {
+		return g, nil
+	}
+
+	return kweb.Error{
+		Status:  http.StatusNotFound,
+		Message: "game does not exist",
 	}, nil
 }
 
@@ -53,7 +60,29 @@ type GameDelete struct {
 }
 
 func (e GameDelete) Do(ctx context.Context) (any, *kweb.Error) {
-	return nil, nil
+	if _, ok := games[e.Id]; ok {
+		delete(games, e.Id)
+
+		return kweb.Response{Status: http.StatusOK}, nil
+	}
+
+	return kweb.Error{
+		Status:  http.StatusNotFound,
+		Message: "game does not exist",
+	}, nil
+}
+
+type Authorization struct {
+	Header string `header:"Authorization"`
+	token  string
+}
+
+func (auth *Authorization) Fetch(r *http.Request) *kweb.Error {
+	auth.token = strings.TrimPrefix(auth.Header, "Bearer ")
+
+	// decode token and check auth
+
+	return nil
 }
 
 var routes = []struct {
